@@ -139,6 +139,7 @@ protected:
 
   void insertFree(octomap::KeySet & free_cells);
   void insertUnseen(octomap::point3d_list & unseen);
+  void fillup(octomap::KeySet & occupied_cels);
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
   void filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const;
 
@@ -242,7 +243,7 @@ protected:
   double m_minSizeX;
   double m_minSizeY;
   bool m_filterSpeckles;
-
+  bool m_insertUnseen;
   bool m_filterGroundPlane;
   double m_groundFilterDistance;
   double m_groundFilterAngle;

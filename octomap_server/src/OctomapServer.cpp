@@ -46,7 +46,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_reconfigureServer(m_config_mutex),
   m_octree(NULL),
   m_maxRange(-1.0),
-  m_worldFrameId("/map"), m_baseFrameId("base_footprint"),
+  m_worldFrameId("/map"), m_baseFrameId("/map"),
   m_useHeightMap(true),
   m_useColoredMap(false),
   m_colorFactor(0.8),
@@ -92,6 +92,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
 
   private_nh.param("filter_speckles", m_filterSpeckles, m_filterSpeckles);
   private_nh.param("filter_ground", m_filterGroundPlane, m_filterGroundPlane);
+  private_nh.param("insert_unseen", m_insertUnseen, m_insertUnseen);
   // distance of points from plane for RANSAC
   private_nh.param("ground_filter/distance", m_groundFilterDistance, m_groundFilterDistance);
   // angular derivation of found plane:
@@ -281,8 +282,6 @@ void OctomapServer::initSpace(){
 
 void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
   ros::WallTime startTime = ros::WallTime::now();
-
-
   //
   // ground filtering in base frame
   //
@@ -363,10 +362,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     pc_ground.header = pc.header;
     pc_nonground.header = pc.header;
   }
-
   insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
-  double total_elapsed = (ros::WallTime::now() - startTime).toSec();
-  ROS_DEBUG("Pointcloud insertion in OctomapServer done (%zu+%zu pts (ground/nonground), %f sec)", pc_ground.size(), pc_nonground.size(), total_elapsed);
 
   publishAll(cloud->header.stamp);
 }
@@ -401,19 +397,21 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
     }
 
     octomap::OcTreeKey endKey;
-    if (m_octree->coordToKeyChecked(point, endKey)){
-      updateMinKey(endKey, m_updateBBXMin);
-      updateMaxKey(endKey, m_updateBBXMax);
-    } else{
-      ROS_ERROR_STREAM("Could not generate Key for endpoint "<<point);
+    if(!std::isnan(point.x()) && !std::isnan(point.y()) && !std::isnan(point.z())){
+      if (m_octree->coordToKeyChecked(point, endKey)){
+        updateMinKey(endKey, m_updateBBXMin);
+        updateMaxKey(endKey, m_updateBBXMax);
+      } else{
+        //ROS_ERROR_STREAM("Could not generate Key for endpoint "<<point);
+      }
     }
   }
-
+  std:: cerr << "All other points" << std::endl;
   // all other points: free on ray, occupied on endpoint:
   for (PCLPointCloud::const_iterator it = nonground.begin(); it != nonground.end(); ++it){
     point3d point(it->x, it->y, it->z);
     // maxrange check
-    if ((m_maxRange < 0.0) || ((point - sensorOrigin).norm() <= m_maxRange) ) {
+    if (true || (m_maxRange < 0.0) || ((point - sensorOrigin).norm() <= m_maxRange) ) {
 
       // free cells
       if (m_octree->computeRayKeys(sensorOrigin, point, m_keyRay)){
@@ -490,15 +488,42 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
     colors = NULL;
   }
 #endif
+  if(m_insertUnseen){
+    point3d pmin = point3d(m_pointcloudMinX, m_pointcloudMinY,m_pointcloudMinZ);
+    point3d pmax = point3d(m_pointcloudMaxX, m_pointcloudMaxY,m_pointcloudMaxZ);
+    point3d_list plist;
+    m_octree->getUnknownLeafCenters(plist, pmin, pmax, 0);
 
-  point3d pmin = point3d(m_pointcloudMinX, m_pointcloudMinY,m_pointcloudMinZ);
-  point3d pmax = point3d(m_pointcloudMaxX, m_pointcloudMaxY,m_pointcloudMaxZ);
-  point3d_list plist;
-  m_octree->getUnknownLeafCenters(plist, pmin, pmax, 0);
+    insertUnseen(plist);
+    m_octree->updateInnerOccupancy();
+  }
 
-  insertUnseen(plist);
-  m_octree->updateInnerOccupancy();
+  fillup(occupied_cells);
+
   //insertFree(free_cells);
+}
+
+void OctomapServer::fillup(KeySet &occupied_cells){
+  point3d coord;
+  double z, z_max;
+  for(KeySet::iterator it = occupied_cells.begin(), end = occupied_cells.end(); it !=end; ++it){
+    coord = m_octree->keyToCoord(*it);
+    z_max = coord.z();
+
+    for(z = 0; z < z_max; z+=m_res/2.0){
+
+      point3d support_coord(coord.x(), coord.y(), z);
+      OcTreeKey key = m_octree->coordToKey(support_coord);
+      if(m_octree->search(key, 0) == NULL){
+        //occupied_cells.insert(m_octree->coordToKey(support_coord));
+        //m_octree->updateNode(m_octree->coordToKey(support_coord), true);
+        m_octree->setNodeValue(key, 0, false);
+      }
+    }
+  }
+
+  m_octree->updateInnerOccupancy();
+  m_octree->prune();
 }
 
 void OctomapServer::insertFree(KeySet & free_cells){
