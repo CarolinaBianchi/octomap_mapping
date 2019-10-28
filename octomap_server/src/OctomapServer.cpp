@@ -406,7 +406,6 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
       }
     }
   }
-  std:: cerr << "All other points" << std::endl;
   // all other points: free on ray, occupied on endpoint:
   for (PCLPointCloud::const_iterator it = nonground.begin(); it != nonground.end(); ++it){
     point3d point(it->x, it->y, it->z);
@@ -535,7 +534,6 @@ void OctomapServer::insertFree(KeySet & free_cells){
 }
 
 void OctomapServer::insertUnseen(point3d_list & unseen){
-  std::cerr << "insertScanUnseen " << unseen.size() << std::endl;
   KeySet occupied_cells;
   // unseen points: mark as occupied
   for(point3d point : unseen){
