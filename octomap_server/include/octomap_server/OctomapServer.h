@@ -263,7 +263,6 @@ protected:
   bool m_projectCompleteMap;
   bool m_useColoredMap;
 
-  void initSpace();
 };
 }
 

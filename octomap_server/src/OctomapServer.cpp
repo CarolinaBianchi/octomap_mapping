@@ -171,7 +171,6 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_binaryMapPub = m_nh.advertise<Octomap>("octomap_binary", 1, m_latchedTopics);
   m_fullMapPub = m_nh.advertise<Octomap>("octomap_full", 1, m_latchedTopics);
   m_initialPcPub = m_nh.advertise<sensor_msgs::PointCloud2>("cloud_in", 1, m_latchedTopics);
-  initSpace();
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
@@ -260,24 +259,6 @@ bool OctomapServer::openFile(const std::string& filename){
 
   return true;
 
-}
-
-void OctomapServer::initSpace(){
-  pcl::PointCloud<pcl::PointXYZ> pc;
-  sensor_msgs::PointCloud2 object_msg;
-  double x[2] = {-2.0, +2.0};
-  double y[2] = {-2.0, +2.0};
-  double z[2] = { 0.0, +2.0};
-  for (int i = 0; i<2; i++){
-    for(int j = 0; j<2; j++){
-      for(int k = 0; k<2; k++){
-        pcl::PointXYZ p(x[i], y[j], z[k]);
-        pc.push_back(p);
-      }
-    }
-  }
-  pcl::toROSMsg(pc,object_msg);
-  m_initialPcPub.publish(object_msg);
 }
 
 void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud){
