@@ -35,8 +35,6 @@
 #include <nav_msgs/OccupancyGrid.h>
 #include <std_msgs/ColorRGBA.h>
 
-// #include <moveit_msgs/CollisionObject.h>
-// #include <moveit_msgs/CollisionMap.h>
 #include <sensor_msgs/PointCloud2.h>
 #include <std_srvs/Empty.h>
 #include <dynamic_reconfigure/server.h>
@@ -65,6 +63,7 @@
 #include <octomap_ros/conversions.h>
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
+#include <octomap_server/GetCombinedOctomaps.h>
 
 //#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
 
@@ -87,11 +86,15 @@ public:
 #endif
   typedef octomap_msgs::GetOctomap OctomapSrv;
   typedef octomap_msgs::BoundingBoxQuery BBXSrv;
+  typedef octomap_server::GetCombinedOctomaps OctomapCombinedSrv;
 
   OctomapServer(ros::NodeHandle private_nh_ = ros::NodeHandle("~"));
   virtual ~OctomapServer();
   virtual bool octomapBinarySrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
   virtual bool octomapFullSrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
+  virtual bool octomapObsSrv(OctomapSrv::Request  &req, OctomapSrv::GetOctomap::Response &res);
+  virtual bool octomapCombinedSrv(OctomapCombinedSrv::Request  &req,
+                                         OctomapCombinedSrv::Response &res);
   bool clearBBXSrv(BBXSrv::Request& req, BBXSrv::Response& resp);
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
@@ -139,7 +142,7 @@ protected:
 
   void insertFree(octomap::KeySet & free_cells);
   void insertUnseen(octomap::point3d_list & unseen);
-  void fillup(octomap::KeySet & occupied_cels);
+  void fillupObstacles(octomap::KeySet & occupied_cels);
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
   void filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const;
 
@@ -207,12 +210,13 @@ protected:
   ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_initialPcPub,m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
-  ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_clearBBXService, m_resetService;
+  ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_octomapObsService, m_octomapCombService, m_clearBBXService, m_resetService;
   tf::TransformListener m_tfListener;
   boost::recursive_mutex m_config_mutex;
   dynamic_reconfigure::Server<OctomapServerConfig> m_reconfigureServer;
 
   OcTreeT* m_octree;
+  OcTreeT* m_octree_obs;
   octomap::KeyRay m_keyRay;  // temp storage for ray casting
   octomap::OcTreeKey m_updateBBXMin;
   octomap::OcTreeKey m_updateBBXMax;

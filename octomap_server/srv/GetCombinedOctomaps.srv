@@ -1,0 +1,8 @@
+# Request
+# Ask to transform the current point cloud into 2 octomaps: one representing the
+# point cloud itself, mand one representing the supporting hidden space which
+# can be considered as an obstacle.
+---
+# Result
+octomap_msgs/Octomap surface
+octomap_msgs/Octomap support

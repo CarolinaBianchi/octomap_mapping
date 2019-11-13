@@ -45,6 +45,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_tfPointCloudSub(NULL),
   m_reconfigureServer(m_config_mutex),
   m_octree(NULL),
+  m_octree_obs(NULL),
   m_maxRange(-1.0),
   m_worldFrameId("/map"), m_baseFrameId("/map"),
   m_useHeightMap(true),
@@ -138,6 +139,15 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_octree->setClampingThresMax(thresMax);
   m_treeDepth = m_octree->getTreeDepth();
   m_octree->useBBXLimit(true);
+
+  m_octree_obs = new OcTreeT(m_res);
+  m_octree_obs->setProbHit(probHit);
+  m_octree_obs->setProbMiss(probMiss);
+  m_octree_obs->setClampingThresMin(thresMin);
+  m_octree_obs->setClampingThresMax(thresMax);
+  m_treeDepth = m_octree_obs->getTreeDepth();
+  m_octree_obs->useBBXLimit(true);
+
   m_maxTreeDepth = m_treeDepth;
   m_gridmap.info.resolution = m_res;
   double r, g, b, a;
@@ -181,6 +191,8 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
 
   m_octomapBinaryService = m_nh.advertiseService("octomap_binary", &OctomapServer::octomapBinarySrv, this);
   m_octomapFullService = m_nh.advertiseService("octomap_full", &OctomapServer::octomapFullSrv, this);
+  m_octomapObsService = m_nh.advertiseService("octomap_obs", &OctomapServer::octomapObsSrv, this);
+  m_octomapCombService = m_nh.advertiseService("octomap_comb", &OctomapServer::octomapCombinedSrv, this);
   m_clearBBXService = private_nh.advertiseService("clear_bbx", &OctomapServer::clearBBXSrv, this);
   m_resetService = private_nh.advertiseService("reset", &OctomapServer::resetSrv, this);
 
@@ -204,6 +216,10 @@ OctomapServer::~OctomapServer(){
   if (m_octree){
     delete m_octree;
     m_octree = NULL;
+  }
+  if (m_octree_obs){
+    delete m_octree_obs;
+    m_octree_obs = NULL;
   }
 
 }
@@ -478,32 +494,30 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
     m_octree->updateInnerOccupancy();
   }
 
-  fillup(occupied_cells);
+  fillupObstacles(occupied_cells);
 
   //insertFree(free_cells);
 }
 
-void OctomapServer::fillup(KeySet &occupied_cells){
+void OctomapServer::fillupObstacles(KeySet &occupied_cells){
   point3d coord;
   double z, z_max;
   for(KeySet::iterator it = occupied_cells.begin(), end = occupied_cells.end(); it !=end; ++it){
-    coord = m_octree->keyToCoord(*it);
+    coord = m_octree_obs->keyToCoord(*it);
     z_max = coord.z();
 
     for(z = 0; z < z_max; z+=m_res/2.0){
 
       point3d support_coord(coord.x(), coord.y(), z);
-      OcTreeKey key = m_octree->coordToKey(support_coord);
-      if(m_octree->search(key, 0) == NULL){
-        //occupied_cells.insert(m_octree->coordToKey(support_coord));
-        //m_octree->updateNode(m_octree->coordToKey(support_coord), true);
-        m_octree->setNodeValue(key, 0, false);
+      OcTreeKey key = m_octree_obs->coordToKey(support_coord);
+      if(m_octree_obs->search(key, 0) == NULL){
+        m_octree_obs->setNodeValue(key, 0, false);
       }
     }
   }
 
-  m_octree->updateInnerOccupancy();
-  m_octree->prune();
+  m_octree_obs->updateInnerOccupancy();
+  m_octree_obs->prune();
 }
 
 void OctomapServer::insertFree(KeySet & free_cells){
@@ -801,12 +815,44 @@ bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
 bool OctomapServer::octomapFullSrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
-  ROS_INFO("Sending full map data on service request");
+  ROS_INFO("Sending full (surface) map data on service request");
   res.map.header.frame_id = m_worldFrameId;
   res.map.header.stamp = ros::Time::now();
 
 
   if (!octomap_msgs::fullMapToMsg(*m_octree, res.map))
+    return false;
+
+  return true;
+}
+
+bool OctomapServer::octomapObsSrv(OctomapSrv::Request  &req,
+                                    OctomapSrv::Response &res)
+{
+  ROS_INFO("Sending obstacle map data on service request");
+  res.map.header.frame_id = m_worldFrameId;
+  res.map.header.stamp = ros::Time::now();
+
+
+  if (!octomap_msgs::fullMapToMsg(*m_octree_obs, res.map))
+    return false;
+
+  return true;
+}
+
+
+bool OctomapServer::octomapCombinedSrv(OctomapCombinedSrv::Request  &req,
+                                       OctomapCombinedSrv::Response &res)
+{
+  ROS_INFO("Sending surface and obstacle map data on service request");
+  res.surface.header.frame_id = m_worldFrameId;
+  res.surface.header.stamp = ros::Time::now();
+
+  res.support.header.frame_id = m_worldFrameId;
+  res.support.header.stamp = res.surface.header.stamp;
+
+  if (!octomap_msgs::fullMapToMsg(*m_octree, res.surface) ||
+      !octomap_msgs::fullMapToMsg(*m_octree_obs, res.support)  )
     return false;
 
   return true;

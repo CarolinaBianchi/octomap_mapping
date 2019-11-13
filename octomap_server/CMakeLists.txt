@@ -1,5 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 project(octomap_server)
+#add_compile_options(-g)
 
 set(PACKAGE_DEPENDENCIES
   roscpp
@@ -14,8 +15,20 @@ set(PACKAGE_DEPENDENCIES
   octomap_msgs
   dynamic_reconfigure
   nodelet
+  message_generation
 )
 
+find_package(octomap_msgs)
+
+add_service_files(
+   FILES
+   GetCombinedOctomaps.srv
+ )
+
+generate_messages(
+  DEPENDENCIES
+  octomap_msgs
+)
 
 find_package(catkin REQUIRED COMPONENTS ${PACKAGE_DEPENDENCIES})
 
@@ -30,10 +43,11 @@ include_directories(
 
 generate_dynamic_reconfigure_options(cfg/OctomapServer.cfg)
 
+
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES ${PROJECT_NAME}
-  CATKIN_DEPENDS ${PACKAGE_DEPENDENCIES}
+  CATKIN_DEPENDS ${PACKAGE_DEPENDENCIES} message_runtime
   DEPENDS OCTOMAP
 )
 
