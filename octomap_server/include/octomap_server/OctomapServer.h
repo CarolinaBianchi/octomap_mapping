@@ -99,7 +99,7 @@ public:
   bool resetSrv(std_srvs::Empty::Request& req, std_srvs::Empty::Response& resp);
 
   virtual void insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr& cloud);
-
+  void getFilteredCloud(PCLPointCloud& cloud);
   virtual bool openFile(const std::string& filename);
 
 protected:
@@ -128,7 +128,7 @@ protected:
   void publishBinaryOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   void publishFullOctoMap(const ros::Time& rostime = ros::Time::now()) const;
   virtual void publishAll(const ros::Time& rostime = ros::Time::now());
-
+  void publishFiltered();
   /**
   * @brief update occupancy map with a scan labeled as ground and nonground.
   * The scans should be in the global map frame.
@@ -140,7 +140,6 @@ protected:
   virtual void insertScan(const tf::Point& sensorOrigin, const PCLPointCloud& ground, const PCLPointCloud& nonground);
 
 
-  void insertFree(octomap::KeySet & free_cells);
   void insertUnseen(octomap::point3d_list & unseen);
   void fillupObstacles(octomap::KeySet & occupied_cels);
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
@@ -207,7 +206,9 @@ protected:
 
   static std_msgs::ColorRGBA heightMapColor(double h);
   ros::NodeHandle m_nh;
-  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub, m_initialPcPub,m_collisionObjectPub, m_mapPub, m_cmapPub, m_fmapPub, m_fmarkerPub;
+  ros::Publisher  m_markerPub, m_binaryMapPub, m_fullMapPub, m_pointCloudPub;
+  ros::Publisher m_initialPcPub,m_collisionObjectPub, m_mapPub, m_cmapPub;
+  ros::Publisher m_fmapPub, m_fmarkerPub, m_filteredPub;
   message_filters::Subscriber<sensor_msgs::PointCloud2>* m_pointCloudSub;
   tf::MessageFilter<sensor_msgs::PointCloud2>* m_tfPointCloudSub;
   ros::ServiceServer m_octomapBinaryService, m_octomapFullService, m_octomapObsService, m_octomapCombService, m_clearBBXService, m_resetService;
@@ -215,6 +216,7 @@ protected:
   boost::recursive_mutex m_config_mutex;
   dynamic_reconfigure::Server<OctomapServerConfig> m_reconfigureServer;
 
+  PCLPointCloud::Ptr m_filtered_pc;
   OcTreeT* m_octree;
   OcTreeT* m_octree_obs;
   octomap::KeyRay m_keyRay;  // temp storage for ray casting
@@ -254,7 +256,6 @@ protected:
   double m_groundFilterPlaneDistance;
 
   bool m_compressMap;
-
   bool m_initConfig;
 
   // downprojected 2D map:

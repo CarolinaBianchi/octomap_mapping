@@ -69,7 +69,8 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_groundFilterDistance(0.04), m_groundFilterAngle(0.15), m_groundFilterPlaneDistance(0.07),
   m_compressMap(true),
   m_incrementalUpdate(true),
-  m_initConfig(true)
+  m_initConfig(true),
+  m_filtered_pc(new PCLPointCloud)
 {
   double probHit, probMiss, thresMin, thresMax;
 
@@ -184,7 +185,7 @@ OctomapServer::OctomapServer(ros::NodeHandle private_nh_)
   m_pointCloudPub = m_nh.advertise<sensor_msgs::PointCloud2>("octomap_point_cloud_centers", 1, m_latchedTopics);
   m_mapPub = m_nh.advertise<nav_msgs::OccupancyGrid>("projected_map", 5, m_latchedTopics);
   m_fmarkerPub = m_nh.advertise<visualization_msgs::MarkerArray>("free_cells_vis_array", 1, m_latchedTopics);
-
+  m_filteredPub = m_nh.advertise<sensor_msgs::PointCloud2>("filtered_pc", 1, m_latchedTopics);
   m_pointCloudSub = new message_filters::Subscriber<sensor_msgs::PointCloud2> (m_nh, "cloud_in", 5);
   m_tfPointCloudSub = new tf::MessageFilter<sensor_msgs::PointCloud2> (*m_pointCloudSub, m_tfListener, m_worldFrameId, 5);
   m_tfPointCloudSub->registerCallback(boost::bind(&OctomapServer::insertCloudCallback, this, _1));
@@ -296,7 +297,6 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
   Eigen::Matrix4f sensorToWorld;
   pcl_ros::transformAsMatrix(sensorToWorldTf, sensorToWorld);
 
-
   // set up filter for height range, also removes NANs:
   pcl::PassThrough<PCLPoint> pass_x;
   pass_x.setFilterFieldName("x");
@@ -360,14 +360,30 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     pc_nonground.header = pc.header;
   }
   insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
-
+  getFilteredCloud(pc_nonground);
   publishAll(cloud->header.stamp);
+}
+
+void OctomapServer::getFilteredCloud(PCLPointCloud &cloud){
+  m_filtered_pc->clear();
+  double occ = 0;
+  for(int i = 0; i<cloud.points.size(); ++i){
+    PCLPoint point = cloud.points[i];
+    occ = 0;
+    // Get voxel grid occupancy
+    OcTreeNode *node = m_octree->search(m_octree->coordToKey(point.x, point.y, point.z));
+    if(node != NULL){
+      occ = node->getOccupancy();
+    }
+    if(occ >= 0.7){
+      m_filtered_pc->push_back(point);
+    }
+  }
 }
 
 void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
                             const PCLPointCloud& ground, const PCLPointCloud& nonground){
   point3d sensorOrigin = pointTfToOctomap(sensorOriginTf);
-
   if (!m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMin)
     || !m_octree->coordToKeyChecked(sensorOrigin, m_updateBBXMax))
   {
@@ -443,8 +459,13 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
       }
     }
   }
+  // mark free cells only if not seen occupied in this cloud
+  for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
+    if (occupied_cells.find(*it) == occupied_cells.end()){
+      m_octree->updateNode(*it, false);
+    }
+  }
 
-  insertFree(free_cells);
   // Mark all occupied cells:
   for (KeySet::iterator it = occupied_cells.begin(), end=occupied_cells.end(); it!= end; it++) {
     m_octree->updateNode(*it, true);
@@ -495,8 +516,6 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
   }
 
   fillupObstacles(occupied_cells);
-
-  //insertFree(free_cells);
 }
 
 void OctomapServer::fillupObstacles(KeySet &occupied_cells){
@@ -520,13 +539,6 @@ void OctomapServer::fillupObstacles(KeySet &occupied_cells){
   m_octree_obs->prune();
 }
 
-void OctomapServer::insertFree(KeySet & free_cells){
-
-  // mark free cells only if not seen occupied in this cloud
-  for(KeySet::iterator it = free_cells.begin(), end=free_cells.end(); it!= end; ++it){
-      m_octree->updateNode(*it, false);
-  }
-}
 
 void OctomapServer::insertUnseen(point3d_list & unseen){
   KeySet occupied_cells;
@@ -574,7 +586,13 @@ void OctomapServer::insertUnseen(point3d_list & unseen){
 
 }
 
-
+void OctomapServer::publishFiltered(){
+  sensor_msgs::PointCloud2 ros_cloud;
+  pcl::toROSMsg(*m_filtered_pc, ros_cloud);
+  ros_cloud.header.frame_id = "map";
+  ros_cloud.header.stamp = ros::Time(0);
+  m_filteredPub.publish(ros_cloud);
+}
 
 void OctomapServer::publishAll(const ros::Time& rostime){
   ros::WallTime startTime = ros::WallTime::now();
@@ -592,6 +610,7 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   bool publishFullMap = (m_latchedTopics || m_fullMapPub.getNumSubscribers() > 0);
   m_publish2DMap = (m_latchedTopics || m_mapPub.getNumSubscribers() > 0);
 
+  publishFiltered();
   // init markers for free space:
   visualization_msgs::MarkerArray freeNodesVis;
   // each array stores all cubes of a different size, one for each depth level:
@@ -804,6 +823,8 @@ bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
   ROS_INFO("Sending binary map data on service request");
   res.map.header.frame_id = m_worldFrameId;
   res.map.header.stamp = ros::Time::now();
+  if(*m_octree->begin() == *m_octree->end())
+    return false;
   if (!octomap_msgs::binaryMapToMsg(*m_octree, res.map))
     return false;
 
