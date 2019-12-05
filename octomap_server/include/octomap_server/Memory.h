@@ -11,7 +11,6 @@ class Memory {
 
 
   void push_back(T & v) {
-    std::cerr << "pushing back" << std::endl;
     if(size_ == N){
       //delete data_[front_];
     }else{

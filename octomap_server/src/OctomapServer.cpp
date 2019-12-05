@@ -359,6 +359,7 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
     pc_ground.header = pc.header;
     pc_nonground.header = pc.header;
   }
+  memory.push_back(pc_nonground);
   insertScan(sensorToWorldTf.getOrigin(), pc_ground, pc_nonground);
   getFilteredCloud(pc_nonground);
   publishAll(cloud->header.stamp);
@@ -367,16 +368,20 @@ void OctomapServer::insertCloudCallback(const sensor_msgs::PointCloud2::ConstPtr
 void OctomapServer::getFilteredCloud(PCLPointCloud &cloud){
   m_filtered_pc->clear();
   double occ = 0;
-  for(int i = 0; i<cloud.points.size(); ++i){
-    PCLPoint point = cloud.points[i];
-    occ = 0;
-    // Get voxel grid occupancy
-    OcTreeNode *node = m_octree->search(m_octree->coordToKey(point.x, point.y, point.z));
-    if(node != NULL){
-      occ = node->getOccupancy();
-    }
-    if(occ >= 0.7){
-      m_filtered_pc->push_back(point);
+
+  for(PCLPointCloud cloud_ptr: memory.getData()){
+
+    for(int i = 0; i<cloud.points.size(); ++i){
+      PCLPoint point = cloud.points[i];
+      occ = 0;
+      // Get voxel grid occupancy
+      OcTreeNode *node = m_octree->search(m_octree->coordToKey(point.x, point.y, point.z));
+      if(node != NULL){
+        occ = node->getOccupancy();
+      }
+      if(occ >= 0.7){
+        m_filtered_pc->push_back(point);
+      }
     }
   }
 }
@@ -1277,7 +1282,6 @@ bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
 }
 
 void OctomapServer::reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level){
-std::cerr << config.sensor_model_miss << std::endl;
   if (m_maxTreeDepth != unsigned(config.max_depth))
     m_maxTreeDepth = unsigned(config.max_depth);
   else{

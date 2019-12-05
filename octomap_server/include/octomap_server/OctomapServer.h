@@ -64,7 +64,7 @@
 #include <octomap/octomap.h>
 #include <octomap/OcTreeKey.h>
 #include <octomap_server/GetCombinedOctomaps.h>
-
+#include <octomap_server/Memory.h>
 //#define COLOR_OCTOMAP_SERVER // switch color here - easier maintenance, only maintain OctomapServer. Two targets are defined in the cmake, octomap_server_color and octomap_server. One has this defined, and the other doesn't
 
 #ifdef COLOR_OCTOMAP_SERVER
@@ -267,6 +267,7 @@ protected:
   unsigned m_multires2DScale;
   bool m_projectCompleteMap;
   bool m_useColoredMap;
+  Memory<PCLPointCloud, 5> memory;
 
 };
 }
