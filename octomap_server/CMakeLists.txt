@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 2.8)
 project(octomap_server)
-#add_compile_options(-g)
+add_compile_options(-g)
 
 set(PACKAGE_DEPENDENCIES
   roscpp

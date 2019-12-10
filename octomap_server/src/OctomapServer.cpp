@@ -814,8 +814,14 @@ void OctomapServer::publishAll(const ros::Time& rostime){
   ROS_DEBUG("Map publishing in OctomapServer took %f sec", total_elapsed);
 
 }
+/*
+bool OctomapServer::octomapTo2DSurface(){
 
+  for(){
 
+  }
+}
+*/
 bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
                                     OctomapSrv::Response &res)
 {
@@ -823,8 +829,10 @@ bool OctomapServer::octomapBinarySrv(OctomapSrv::Request  &req,
   ROS_INFO("Sending binary map data on service request");
   res.map.header.frame_id = m_worldFrameId;
   res.map.header.stamp = ros::Time::now();
-  if(*m_octree->begin() == *m_octree->end())
+  if(m_octree->begin() == m_octree->end()){
+    ROS_INFO("Octree is empty?");
     return false;
+  }
   if (!octomap_msgs::binaryMapToMsg(*m_octree, res.map))
     return false;
 
