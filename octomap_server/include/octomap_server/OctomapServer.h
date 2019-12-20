@@ -151,6 +151,7 @@ protected:
   * @return
   */
   bool isSpeckleNode(const octomap::OcTreeKey& key) const;
+  bool isSpeckleNode(const octomap::OcTreeKey& key, const OcTreeT *tree) const;
 
   /// hook that is called before traversing all nodes
   virtual void handlePreNodeTraversal(const ros::Time& rostime);
