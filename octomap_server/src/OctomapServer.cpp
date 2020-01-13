@@ -521,18 +521,28 @@ void OctomapServer::insertScan(const tf::Point& sensorOriginTf,
 void OctomapServer::fillupObstacles(KeySet &occupied_cells){
   point3d coord;
   double z, z_max;
+
+  // Delete the previous data
+  //m_octree_obs->clear();
+
   for(KeySet::iterator it = occupied_cells.begin(), end = occupied_cells.end(); it !=end; ++it){
-    coord = m_octree_obs->keyToCoord(*it);
-    z_max = coord.z();
 
-    for(z = 0; z < z_max; z+=m_res/2.0){
+    if(isSpeckleNode(*it, m_octree)){
+      continue;
+    }else if(m_octree->search(*it)->getOccupancy() > 0.9){
+      coord = m_octree_obs->keyToCoord(*it);
+      z_max = coord.z()-m_res;///2.0;
 
-      point3d support_coord(coord.x(), coord.y(), z);
-      OcTreeKey key = m_octree_obs->coordToKey(support_coord);
-      if(m_octree_obs->search(key, 0) == NULL){
-        m_octree_obs->setNodeValue(key, 0, false);
+      for(z = 0; z < z_max; z+=m_res/2.0){
+
+        point3d support_coord(coord.x(), coord.y(), z);
+        OcTreeKey key = m_octree_obs->coordToKey(support_coord);
+        if(m_octree_obs->search(key, 0) == NULL){
+          m_octree_obs->setNodeValue(key, 0, false);
+        }
       }
     }
+
   }
 
   m_octree_obs->updateInnerOccupancy();
@@ -1282,6 +1292,26 @@ bool OctomapServer::isSpeckleNode(const OcTreeKey&nKey) const {
   }
 
   return neighborFound;
+}
+
+bool OctomapServer::isSpeckleNode(const OcTreeKey &nKey, const OcTreeT *tree) const {
+  OcTreeKey key;
+  bool neighborFound = false;
+  for (key[2] = nKey[2] - 1; !neighborFound && key[2] <= nKey[2] + 1; ++key[2]){
+    for (key[1] = nKey[1] - 1; !neighborFound && key[1] <= nKey[1] + 1; ++key[1]){
+      for (key[0] = nKey[0] - 1; !neighborFound && key[0] <= nKey[0] + 1; ++key[0]){
+        if (key != nKey){
+          OcTreeNode* node = tree->search(key);
+          if (node && tree->isNodeOccupied(node)){
+            // we have a neighbor => break!
+            neighborFound = true;
+          }
+        }
+      }
+    }
+  }
+
+  return !neighborFound;
 }
 
 void OctomapServer::reconfigureCallback(octomap_server::OctomapServerConfig& config, uint32_t level){

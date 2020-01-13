@@ -141,7 +141,7 @@ protected:
 
 
   void insertUnseen(octomap::point3d_list & unseen);
-  void fillupObstacles(octomap::KeySet & occupied_cels);
+  void fillupObstacles(octomap::KeySet & occupied_cells);
   /// label the input cloud "pc" into ground and nonground. Should be in the robot's fixed frame (not world!)
   void filterGroundPlane(const PCLPointCloud& pc, PCLPointCloud& ground, PCLPointCloud& nonground) const;
 
@@ -151,6 +151,7 @@ protected:
   * @return
   */
   bool isSpeckleNode(const octomap::OcTreeKey& key) const;
+  bool isSpeckleNode(const octomap::OcTreeKey& key, const OcTreeT *tree) const;
 
   /// hook that is called before traversing all nodes
   virtual void handlePreNodeTraversal(const ros::Time& rostime);
